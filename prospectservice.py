@@ -8,6 +8,7 @@ import re
 import subprocess
 import urllib.request
 import winreg
+import win32api
 import win32serviceutil
 import win32service
 import servicemanager
@@ -65,11 +66,11 @@ class ProspectService:
                 try:
                     software['version'] = winreg.QueryValueEx(sub_key, "DisplayVersion")[0]
                 except EnvironmentError:
-                    software['version'] = 'undefined'
+                    software['version'] = 'n/a'
                 try:
                     software['publisher'] = winreg.QueryValueEx(sub_key, "Publisher")[0]
                 except EnvironmentError:
-                    software['publisher'] = 'undefined'
+                    software['publisher'] = 'n/a'
                 software_list.append(software)
             except EnvironmentError:
                 continue
@@ -132,13 +133,7 @@ class ProspectService:
 
 
     def get_profile(self):
-        # installed_software = self.get_software(
-        #     winreg.HKEY_LOCAL_MACHINE, winreg.KEY_WOW64_32KEY
-        # ) + self.get_software(
-        #     winreg.HKEY_LOCAL_MACHINE, winreg.KEY_WOW64_64KEY
-        # ) + self.get_software(
-        #     winreg.HKEY_CURRENT_USER, 0
-        # )
+        installed_software = self.get_software(winreg.HKEY_LOCAL_MACHINE, winreg.KEY_WOW64_64KEY)
             
         profile = {
             'hwid': self.get_hwid().hexdigest(),
@@ -149,10 +144,10 @@ class ProspectService:
                 'arch': platform.architecture()[0],
                 'kernel': platform.version(),
             },
-            # 'software': {
-            #     'programs': installed_software,
-            #     'num_installed': len(installed_software)
-            # },
+            'software': {
+                'programs': installed_software,
+                'num_installed': len(installed_software)
+            },
             'hardware': {
                 'bios': self.get_bios(),
                 'cpu': {
@@ -168,7 +163,7 @@ class ProspectService:
 
     def write_profile(self, profile: dict):
         filename = 'prospect-profile-' + profile.get('hwid')[:8] + '.json'
-        filepath = os.path.join(os.path.expanduser('~'), '.prospect')
+        filepath = os.path.join('C:\\', 'ProspectService')
 
         if not os.path.isdir(filepath):
             os.mkdir(filepath)
@@ -182,14 +177,17 @@ class ProspectService:
 
 
     def send_profile(self, profile: dict):
-        content = json.dumps(profile, sort_keys=False, indent=4)
-        request = urllib.request.Request(url)
-        request.add_header('Content-Type', 'application/json; charset=utf-8')
-        request.add_header('Authorization', 'Bearer c2VjcmV0')
-        data = content.encode('utf-8')
-        request.add_header('Content-Length', len(data))
+        try:
+            content = json.dumps(profile, sort_keys=False, indent=4)
+            request = urllib.request.Request(url)
+            request.add_header('Content-Type', 'application/json; charset=utf-8')
+            request.add_header('Authorization', 'Bearer c2VjcmV0')
+            data = content.encode('utf-8')
+            request.add_header('Content-Length', len(data))
 
-        urllib.request.urlopen(request, data)
+            urllib.request.urlopen(request, data)
+        except:
+            servicemanager.LogWarningMsg("Unable to connect to prospect device profiling API.")
 
 
     def log_profile_event(self, profile):
@@ -200,15 +198,19 @@ class ProspectService:
         event_data = str.encode(profile['hwid'])
 
         PROSPECT_EVENT_NAME = "ProspectService"
-        PROSPECT_EVENT_ID = 255
-        PROSPECT_EVENT_CATEGORY = 10001
+        PROSPECT_EVENT_ID = 100
+        PROSPECT_EVENT_CATEGORY = 1000
         PROSPECT_EVENT_STRINGS = event_strs
         PROSPECT_EVENT_DATA = event_data
 
         win32evtlogutil.ReportEvent(
-            PROSPECT_EVENT_NAME, PROSPECT_EVENT_ID, eventCategory=PROSPECT_EVENT_CATEGORY,
-            eventType=win32evtlog.EVENTLOG_INFORMATION_TYPE, strings=PROSPECT_EVENT_STRINGS,
-            data=PROSPECT_EVENT_DATA)
+            PROSPECT_EVENT_NAME,
+            PROSPECT_EVENT_ID,
+            eventCategory=PROSPECT_EVENT_CATEGORY,
+            eventType=win32evtlog.EVENTLOG_INFORMATION_TYPE,
+            strings=PROSPECT_EVENT_STRINGS,
+            data=PROSPECT_EVENT_DATA
+        )
 
 
     def profile_device(self):
@@ -216,13 +218,13 @@ class ProspectService:
         print(json.dumps(profile, sort_keys=False, indent=4))
         self.write_profile(profile)
         self.log_profile_event(profile)
-        # self.send_profile(profile)
+        self.send_profile(profile)
 
 
     def run(self):
         self.running = True
         while self.running:
-            time.sleep(30)
+            time.sleep(300)
             self.profile_device()
 
 
@@ -231,7 +233,7 @@ class ProspectServiceFramework(win32serviceutil.ServiceFramework):
     _svc_display_name_ = 'Prospect Device Profiler'
 
     def SvcStop(self):
-        servicemanager.LogInfoMsg("Shutting down prospect device proiler...")
+        servicemanager.LogInfoMsg("Shutting down prospect device profiler...")
         self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
         self.service_impl.stop()
         self.ReportServiceStatus(win32service.SERVICE_STOPPED)
