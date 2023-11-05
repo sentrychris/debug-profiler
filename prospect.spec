@@ -4,47 +4,24 @@
 block_cipher = None
 
 
-a = Analysis(
-    ['prospect.py'],
-    pathex=[],
-    binaries=[],
-    datas=[],
-    hiddenimports=[],
-    hookspath=[],
-    hooksconfig={},
-    runtime_hooks=[],
-    excludes=[],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
-    cipher=block_cipher,
-    noarchive=False,
-)
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+a = Analysis(['prospect.py'],
+        binaries=None,
+        hiddenimports=[],
+        hookspath=None,
+        runtime_hooks=None,
+        excludes=None)
 
-exe = EXE(
-    pyz,
-    a.scripts,
-    [],
-    exclude_binaries=True,
-    name='prospect',
-    debug=False,
-    bootloader_ignore_signals=False,
-    strip=False,
-    upx=True,
-    console=True,
-    disable_windowed_traceback=False,
-    argv_emulation=False,
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
-)
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    name='prospect',
-)
+a.datas += [('prospect.ico', 'prospect.ico', 'DATA')]
+
+pyz = PYZ(a.pure)
+
+exe = EXE(pyz,
+        a.scripts,
+        a.binaries,
+        a.datas,
+        name='prospect',
+        strip=False,
+        upx=True,
+        console=True,
+        icon='prospect.ico',
+        version='version.rc')

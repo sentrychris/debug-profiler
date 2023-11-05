@@ -7,7 +7,7 @@ import subprocess
 import urllib.request
 import winreg
 
-url='https://prospect-pi.ddns.net/api/devices/profiles'
+url='http://prospector.api.local:8888/api/devices/profiles'
 
 
 def snake(str: str):
@@ -174,7 +174,7 @@ def send_profile(profile: dict):
     content = json.dumps(profile, sort_keys=False, indent=4)
     request = urllib.request.Request(url)
     request.add_header('Content-Type', 'application/json; charset=utf-8')
-    request.add_header('Authorization', 'Bearer eDBnenpBOGMmQlF3d2hTSG5FRVVZbVlt')
+    request.add_header('Authorization', 'Bearer c2VjcmV0')
     data = content.encode('utf-8')
     request.add_header('Content-Length', len(data))
 
@@ -185,7 +185,7 @@ def main():
     profile = get_profile()
     print(json.dumps(profile, sort_keys=False, indent=4))
     write_profile(profile)
-    # send_profile(profile)
+    send_profile(profile)
 
 
 if __name__ == '__main__':
