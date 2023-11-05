@@ -42,5 +42,3 @@ pyinstaller $SPEC_FILE --upx-dir "./$UPX_RELEASE"
 
 echo "Removing UPX"
 rm -rf "./$UPX_RELEASE"
-
-exit 0

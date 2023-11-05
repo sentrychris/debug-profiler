@@ -13,6 +13,7 @@ url='http://prospector.api.local:8888/api/devices/profiles'
 def snake(str: str):
     return re.sub(r'(?<!^)(?=[A-Z])', '_', str).lower()
 
+
 def open_key(hive, path):
     return winreg.OpenKey(
         winreg.ConnectRegistry(None, hive),
@@ -20,6 +21,7 @@ def open_key(hive, path):
         0,
         winreg.KEY_READ | winreg.KEY_WOW64_64KEY
     ) 
+
 
 def get_bios():
     reg_key = open_key(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System")
@@ -171,14 +173,17 @@ def write_profile(profile: dict):
 
 
 def send_profile(profile: dict):
-    content = json.dumps(profile, sort_keys=False, indent=4)
-    request = urllib.request.Request(url)
-    request.add_header('Content-Type', 'application/json; charset=utf-8')
-    request.add_header('Authorization', 'Bearer c2VjcmV0')
-    data = content.encode('utf-8')
-    request.add_header('Content-Length', len(data))
+    try:
+        content = json.dumps(profile, sort_keys=False, indent=4)
+        request = urllib.request.Request(url)
+        request.add_header('Content-Type', 'application/json; charset=utf-8')
+        request.add_header('Authorization', 'Bearer c2VjcmV0')
+        data = content.encode('utf-8')
+        request.add_header('Content-Length', len(data))
 
-    urllib.request.urlopen(request, data)
+        urllib.request.urlopen(request, data)
+    except:
+        print('Could not send profiling data to prospect API')
 
 
 def main():

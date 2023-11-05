@@ -8,7 +8,6 @@ import re
 import subprocess
 import urllib.request
 import winreg
-import win32api
 import win32serviceutil
 import win32service
 import servicemanager
@@ -164,6 +163,7 @@ class ProspectService:
     def write_profile(self, profile: dict):
         filename = 'prospect-profile-' + profile.get('hwid')[:8] + '.json'
         filepath = os.path.join('C:\\', 'ProspectService')
+        # filepath = os.path.join(os.path.expanduser('~'), '.prospect')
 
         if not os.path.isdir(filepath):
             os.mkdir(filepath)
