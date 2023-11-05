@@ -191,9 +191,14 @@ class ProspectService:
 
 
     def log_profile_event(self, profile):
-        event_strs = []
+        event_strs = ['Prospect device profile']
         for key, value in profile.items():
-            event_strs.append(str(key) + ': ' + str(value))
+            if key not in ['software', 'hardware']:
+                if key == 'os':
+                    for k, v in value.items():
+                        event_strs.append(str(k) + ': ' + str(v))
+                else:
+                    event_strs.append(str(key) + ': ' + str(value))
 
         event_data = str.encode(profile['hwid'])
 
@@ -224,22 +229,22 @@ class ProspectService:
     def run(self):
         self.running = True
         while self.running:
-            time.sleep(300)
+            time.sleep(60)
             self.profile_device()
 
 
 class ProspectServiceFramework(win32serviceutil.ServiceFramework):
     _svc_name_ = 'ProspectService'
-    _svc_display_name_ = 'Prospect Device Profiler'
+    _svc_display_name_ = 'Prospect Device Profiling Service'
 
     def SvcStop(self):
-        servicemanager.LogInfoMsg("Shutting down prospect device profiler...")
+        servicemanager.LogInfoMsg("Shutting down prospect device profiling service.")
         self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
         self.service_impl.stop()
         self.ReportServiceStatus(win32service.SERVICE_STOPPED)
 
     def SvcDoRun(self):
-        servicemanager.LogInfoMsg("Starting prospect device profiler...")
+        servicemanager.LogInfoMsg("Starting prospect device profiling service.")
         self.ReportServiceStatus(win32service.SERVICE_START_PENDING)
         self.service_impl = ProspectService()
         self.ReportServiceStatus(win32service.SERVICE_RUNNING)
