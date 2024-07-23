@@ -4,7 +4,7 @@ import os
 
 
 project_root = os.getcwd()
-main_script = os.path.join(project_root, 'prospector_win.py')
+main_script = os.path.join(project_root, 'main.py')
 
 public_folder = os.path.join(project_root, 'public')
 icon_file = os.path.join(project_root, 'prospector.ico')

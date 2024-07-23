@@ -1,13 +1,11 @@
 import hashlib
 import json
+import msvcrt
 import os
 import platform
 import re
 import subprocess
-import urllib.request
 import winreg
-
-url='http://prospector.api.local:8888/api/devices/profiles'
 
 
 def snake(str: str):
@@ -167,31 +165,18 @@ def write_profile(profile: dict):
     content = json.dumps(profile, sort_keys=False, indent=4)
     destination = os.path.join(filepath, filename)
 
-    with open(destination, 'w') as prospectfile:
-        prospectfile.write(content)
+    with open(destination, 'w') as prospectorfile:
+        prospectorfile.write(content)
         print('device profile written to ' + destination)
-
-
-def send_profile(profile: dict):
-    try:
-        content = json.dumps(profile, sort_keys=False, indent=4)
-        request = urllib.request.Request(url)
-        request.add_header('Content-Type', 'application/json; charset=utf-8')
-        request.add_header('Authorization', 'Bearer c2VjcmV0')
-        data = content.encode('utf-8')
-        request.add_header('Content-Length', len(data))
-
-        urllib.request.urlopen(request, data)
-    except:
-        print('Could not send profiling data to prospector API')
 
 
 def main():
     profile = get_profile()
     print(json.dumps(profile, sort_keys=False, indent=4))
     write_profile(profile)
-    send_profile(profile)
 
 
 if __name__ == '__main__':
     main()
+    print("Press any key to exit...")
+    msvcrt.getch()
