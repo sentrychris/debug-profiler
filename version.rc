@@ -15,11 +15,11 @@ VSVersionInfo(
       StringTable(
         u'040904B0',
         [StringStruct(u'CompanyName', u'Chris Rowles'),
-        StringStruct(u'FileDescription', u'Prospect Device Profiler'),
+        StringStruct(u'FileDescription', u'Prospector - Windows device profiler'),
         StringStruct(u'FileVersion', u'1.1.0.1167'),
-        StringStruct(u'InternalName', u'prospect'),
+        StringStruct(u'InternalName', u'prospector'),
         StringStruct(u'LegalCopyright', u'\xa9 Chris Rowles. All rights reserved.'),
-        StringStruct(u'OriginalFilename', u'prospect.exe'),
+        StringStruct(u'OriginalFilename', u'prospector.exe'),
         StringStruct(u'ProductName', u'Prospect Device Profiler'),
         StringStruct(u'ProductVersion', u'1.1.0.1167')])
       ]), 

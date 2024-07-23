@@ -158,8 +158,8 @@ def get_profile():
 
 
 def write_profile(profile: dict):
-    filename = 'prospect-profile-' + profile.get('hwid')[:8] + '.json'
-    filepath = os.path.join(os.path.expanduser('~'), '.prospect')
+    filename = 'prospector-profile-' + profile.get('hwid')[:8] + '.json'
+    filepath = os.path.join(os.path.expanduser('~'), '.prospector')
 
     if not os.path.isdir(filepath):
         os.mkdir(filepath)
@@ -183,7 +183,7 @@ def send_profile(profile: dict):
 
         urllib.request.urlopen(request, data)
     except:
-        print('Could not send profiling data to prospect API')
+        print('Could not send profiling data to prospector API')
 
 
 def main():

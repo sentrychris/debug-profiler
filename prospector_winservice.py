@@ -161,9 +161,8 @@ class ProspectService:
 
 
     def write_profile(self, profile: dict):
-        filename = 'prospect-profile-' + profile.get('hwid')[:8] + '.json'
+        filename = 'prospector-profile-' + profile.get('hwid')[:8] + '.json'
         filepath = os.path.join('C:\\', 'ProspectService')
-        # filepath = os.path.join(os.path.expanduser('~'), '.prospect')
 
         if not os.path.isdir(filepath):
             os.mkdir(filepath)
@@ -187,7 +186,7 @@ class ProspectService:
 
             urllib.request.urlopen(request, data)
         except:
-            servicemanager.LogWarningMsg("Unable to connect to prospect device profiling API.")
+            servicemanager.LogWarningMsg("Unable to connect to prospector device profiling API.")
 
 
     def log_profile_event(self, profile):
@@ -238,13 +237,13 @@ class ProspectServiceFramework(win32serviceutil.ServiceFramework):
     _svc_display_name_ = 'Prospect Device Profiling Service'
 
     def SvcStop(self):
-        servicemanager.LogInfoMsg("Shutting down prospect device profiling service.")
+        servicemanager.LogInfoMsg("Shutting down prospector device profiling service.")
         self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
         self.service_impl.stop()
         self.ReportServiceStatus(win32service.SERVICE_STOPPED)
 
     def SvcDoRun(self):
-        servicemanager.LogInfoMsg("Starting prospect device profiling service.")
+        servicemanager.LogInfoMsg("Starting prospector device profiling service.")
         self.ReportServiceStatus(win32service.SERVICE_START_PENDING)
         self.service_impl = ProspectService()
         self.ReportServiceStatus(win32service.SERVICE_RUNNING)
