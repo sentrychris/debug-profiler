@@ -8,20 +8,45 @@ import subprocess
 import winreg
 
 
-def snake(str: str):
+def snake(str: str) -> str:
+    """
+    Converts a CamelCase string to snake_case.
+
+    Args:
+        str (str): The string to convert.
+
+    Returns:
+        str: The converted string in snake_case.
+    """
     return re.sub(r'(?<!^)(?=[A-Z])', '_', str).lower()
 
 
-def open_key(hive, path):
+def open_key(hive, path) -> winreg.HKEYType:
+    """
+    Opens a registry key.
+
+    Args:
+        hive: The registry hive (e.g., winreg.HKEY_LOCAL_MACHINE).
+        path (str): The registry path.
+
+    Returns:
+        winreg.HKEYType: The opened registry key.
+    """
     return winreg.OpenKey(
         winreg.ConnectRegistry(None, hive),
         path,
         0,
         winreg.KEY_READ | winreg.KEY_WOW64_64KEY
-    ) 
+    )
 
 
-def get_bios():
+def get_bios() -> dict:
+    """
+    Retrieves BIOS information from the Windows registry.
+
+    Returns:
+        dict: A dictionary containing BIOS model and firmware version.
+    """
     reg_key = open_key(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System")
     reg_key_b = open_key(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System\BIOS")
     version = winreg.QueryValueEx(reg_key, "SystemBiosVersion")
@@ -36,7 +61,17 @@ def get_bios():
     }
 
 
-def get_software(hive, flag):
+def get_software(hive, flag) -> list:
+    """
+    Retrieves a list of installed software from the Windows registry.
+
+    Args:
+        hive: The registry hive (e.g., winreg.HKEY_LOCAL_MACHINE).
+        flag: The registry access flag.
+
+    Returns:
+        list: A list of dictionaries, each containing software details.
+    """
     reg_key = winreg.OpenKey(
         winreg.ConnectRegistry(None, hive),
         r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
@@ -65,7 +100,13 @@ def get_software(hive, flag):
     return software_list  
 
 
-def get_memory():
+def get_memory() -> list:
+    """
+    Retrieves memory (RAM) information using WMIC.
+
+    Returns:
+        list: A list of dictionaries, each containing memory chip details.
+    """
     wmic = subprocess.check_output(
         'wmic memorychip get DeviceLocator, Capacity, ConfiguredClockSpeed, DataWidth, Manufacturer, PartNumber'
     )
@@ -103,7 +144,13 @@ def get_memory():
     return devices
 
 
-def get_distribution():
+def get_distribution() -> str:
+    """
+    Retrieves the operating system distribution name.
+
+    Returns:
+        str: The OS distribution name.
+    """
     os = subprocess.Popen('systeminfo', stdout=subprocess.PIPE).communicate()[0]
     try:
         os = str(os, "latin-1")
@@ -113,13 +160,25 @@ def get_distribution():
     return re.search("OS Name:\s*(.*)", os).group(1).strip()
 
 
-def get_hwid():
+def get_hwid() -> hashlib._hashlib.HASH:
+    """
+    Retrieves the hardware ID (HWID) and generates a SHA-256 hash.
+
+    Returns:
+        hashlib._hashlib.HASH: The SHA-256 hash of the HWID.
+    """
     id = str(subprocess.check_output('wmic csproduct get uuid'), 'utf-8').split('\n')[1].strip()
     
     return hashlib.sha256(id.encode('utf-8'))
 
 
-def get_profile():
+def get_profile() -> dict:
+    """
+    Gathers system profile information, including hardware, software, and OS details.
+
+    Returns:
+        dict: A dictionary containing the system profile.
+    """
     installed_software = get_software(
         winreg.HKEY_LOCAL_MACHINE, winreg.KEY_WOW64_32KEY
     ) + get_software(
@@ -156,6 +215,12 @@ def get_profile():
 
 
 def write_profile(profile: dict):
+    """
+    Writes the system profile to a JSON file in the user's home directory.
+
+    Args:
+        profile (dict): The system profile to write.
+    """
     filename = 'prospector-profile-' + profile.get('hwid')[:8] + '.json'
     filepath = os.path.join(os.path.expanduser('~'), '.prospector')
 
@@ -171,6 +236,9 @@ def write_profile(profile: dict):
 
 
 def main():
+    """
+    Main function to generate and write the system profile.
+    """
     profile = get_profile()
     print(json.dumps(profile, sort_keys=False, indent=4))
     write_profile(profile)
