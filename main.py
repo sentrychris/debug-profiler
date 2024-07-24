@@ -8,7 +8,7 @@ import subprocess
 import winreg
 
 
-def snake(str: str) -> str:
+def to_snake_case(str: str) -> str:
     """
     Converts a CamelCase string to snake_case.
 
@@ -18,10 +18,11 @@ def snake(str: str) -> str:
     Returns:
         str: The converted string in snake_case.
     """
+
     return re.sub(r'(?<!^)(?=[A-Z])', '_', str).lower()
 
 
-def open_key(hive, path) -> winreg.HKEYType:
+def open_reg_key(hive, path) -> winreg.HKEYType:
     """
     Opens a registry key.
 
@@ -32,6 +33,7 @@ def open_key(hive, path) -> winreg.HKEYType:
     Returns:
         winreg.HKEYType: The opened registry key.
     """
+
     return winreg.OpenKey(
         winreg.ConnectRegistry(None, hive),
         path,
@@ -47,8 +49,9 @@ def get_bios() -> dict:
     Returns:
         dict: A dictionary containing BIOS model and firmware version.
     """
-    reg_key = open_key(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System")
-    reg_key_b = open_key(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System\BIOS")
+
+    reg_key = open_reg_key(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System")
+    reg_key_b = open_reg_key(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System\BIOS")
     version = winreg.QueryValueEx(reg_key, "SystemBiosVersion")
     model = [
         winreg.QueryValueEx(reg_key_b, "BaseBoardManufacturer")[0],
@@ -72,6 +75,7 @@ def get_software(hive, flag) -> list:
     Returns:
         list: A list of dictionaries, each containing software details.
     """
+
     reg_key = winreg.OpenKey(
         winreg.ConnectRegistry(None, hive),
         r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
@@ -107,6 +111,7 @@ def get_memory() -> list:
     Returns:
         list: A list of dictionaries, each containing memory chip details.
     """
+
     wmic = subprocess.check_output(
         'wmic memorychip get DeviceLocator, Capacity, ConfiguredClockSpeed, DataWidth, Manufacturer, PartNumber'
     )
@@ -121,7 +126,7 @@ def get_memory() -> list:
         for d in range(num_devices):
             output = {}
             for o in range(offset):
-                output[snake(memory[o])] = ''
+                output[to_snake_case(memory[o])] = ''
             
             if d != 0 and d % 1 == 0:
                 multi = multi + 1
@@ -129,7 +134,7 @@ def get_memory() -> list:
             values = memory[offset*multi:]
             
             for v in range(offset):
-                key = snake(memory[v])
+                key = to_snake_case(memory[v])
                 if key in ['capacity', 'configured_clock_speed', 'data_width']:
                     value = int(values[v])
                     if key == 'capacity': value = round(int(values[v]) / (1024.0 ** 3))
@@ -151,6 +156,7 @@ def get_distribution() -> str:
     Returns:
         str: The OS distribution name.
     """
+
     os = subprocess.Popen('systeminfo', stdout=subprocess.PIPE).communicate()[0]
     try:
         os = str(os, "latin-1")
@@ -167,6 +173,7 @@ def get_hwid() -> hashlib._hashlib.HASH:
     Returns:
         hashlib._hashlib.HASH: The SHA-256 hash of the HWID.
     """
+
     id = str(subprocess.check_output('wmic csproduct get uuid'), 'utf-8').split('\n')[1].strip()
     
     return hashlib.sha256(id.encode('utf-8'))
@@ -179,6 +186,7 @@ def get_profile() -> dict:
     Returns:
         dict: A dictionary containing the system profile.
     """
+
     installed_software = get_software(
         winreg.HKEY_LOCAL_MACHINE, winreg.KEY_WOW64_32KEY
     ) + get_software(
@@ -195,7 +203,7 @@ def get_profile() -> dict:
             'platform': platform.system(),
             'distribution': get_distribution(),
             'arch': platform.architecture()[0],
-            'kernel': platform.version(),
+            'version': platform.version(),
         },
         'software': {
             'programs': installed_software,
@@ -221,6 +229,7 @@ def write_profile(profile: dict):
     Args:
         profile (dict): The system profile to write.
     """
+
     filename = 'prospector-profile-' + profile.get('hwid')[:8] + '.json'
     filepath = os.path.join(os.path.expanduser('~'), '.prospector')
 
@@ -239,6 +248,7 @@ def main():
     """
     Main function to generate and write the system profile.
     """
+
     profile = get_profile()
     print(json.dumps(profile, sort_keys=False, indent=4))
     write_profile(profile)
