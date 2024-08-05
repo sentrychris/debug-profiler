@@ -160,17 +160,17 @@ def get_memory() -> list:
         list: A list of dictionaries, each containing memory chip details.
     """
 
-    wmic = subprocess.check_output(
-        'wmic memorychip get DeviceLocator, Capacity, ConfiguredClockSpeed, DataWidth, Manufacturer, PartNumber'
-    )
-
-    memory = str(wmic, 'utf-8').split()
-
-    devices = []
-    multi = 1
-    offset = 6
-    num_devices = round(len(memory[offset:]) / offset)
     try:
+        wmic = subprocess.check_output(
+            'wmic memorychip get DeviceLocator, Capacity, ConfiguredClockSpeed, DataWidth, Manufacturer, PartNumber'
+        )
+
+        memory = str(wmic, 'utf-8').split()
+
+        devices = []
+        multi = 1
+        offset = 6
+        num_devices = round(len(memory[offset:]) / offset)
         for d in range(num_devices):
             output = {}
             for o in range(offset):
@@ -189,10 +189,11 @@ def get_memory() -> list:
                 output[key] = value
 
             devices.append(output)
-    except:
-        pass
 
-    return devices
+        return devices
+    except Exception as e:
+        print_error(f"Failed to collect memory data: {e}")
+        return []
 
 
 def get_disks() -> list:
@@ -254,6 +255,7 @@ def get_gpus() -> list:
                     'driver_version': parts[0],
                     'status': parts[2]
                 })
+
         return gpus
     except Exception as e:
         print_error(f"Failed to get GPU information: {e}")
@@ -267,6 +269,7 @@ def get_network_interfaces() -> list:
     Returns:
         list: A list of dictionaries, each containing network interface details.
     """
+
     try:
         wmic = subprocess.check_output('wmic nic get Name, MACAddress, Speed, Manufacturer, Description', shell=True)
         lines = str(wmic, 'utf-8').strip().split('\n')
@@ -313,6 +316,8 @@ def get_connected_wifi() -> dict:
     try:
         wifi_info = subprocess.check_output('netsh wlan show interfaces', shell=True)
         wifi_info = str(wifi_info, 'utf-8').strip().split('\n')
+
+        exclude_keys = ['there_is_1_interface_on_the_system']
         
         wifi_details = {}
         for line in wifi_info:
@@ -320,7 +325,8 @@ def get_connected_wifi() -> dict:
                 key, value = line.split(':', 1)
                 key = key.strip().lower().replace(' ', '_')
                 value = value.strip()
-                wifi_details[key] = value
+                if key not in exclude_keys:
+                    wifi_details[key] = value
         
         return wifi_details
     except Exception as e:
@@ -336,25 +342,13 @@ def get_distribution() -> str:
         str: The OS distribution name.
     """
 
-    os = subprocess.Popen('systeminfo', stdout=subprocess.PIPE).communicate()[0]
     try:
-        os = str(os, "latin-1")
+        os = subprocess.Popen('systeminfo', stdout=subprocess.PIPE).communicate()[0]
+        distro = str(os, "latin-1")
+
+        return re.search("OS Name:\s*(.*)", distro).group(1).strip()
     except:
-        pass
-
-    return re.search("OS Name:\s*(.*)", os).group(1).strip()
-
-
-def get_hwid() -> str:
-    """
-    Retrieves the hardware ID (HWID) and generates a SHA-256 hash.
-
-    Returns:
-        str: The SHA-256 hash of the HWID.
-    """
-
-    id = str(subprocess.check_output('wmic csproduct get uuid'), 'utf-8').split('\n')[1].strip()
-    return hashlib.sha256(id.encode('utf-8')).hexdigest()
+        return "N/A"
 
 
 def get_uptime() -> str:
@@ -369,21 +363,20 @@ def get_uptime() -> str:
     try:
         uptime_ms = ctypes.windll.kernel32.GetTickCount64()
         total_seconds = uptime_ms / 1000.0
+        days, remainder = divmod(total_seconds, 86400)
+        hours, remainder = divmod(remainder, 3600)
+        minutes, seconds = divmod(remainder, 60)
+
+        uptime_parts = [
+            f"{int(days)} day{'s' if days != 1 else ''}" if days else "",
+            f"{int(hours)} hr{'s' if hours != 1 else ''}" if hours else "",
+            f"{int(minutes)} min{'s' if minutes != 1 else ''}" if minutes else "",
+            f"{int(seconds)} sec{'s' if seconds != 1 else ''}" if seconds else ""
+        ]
+
+        return ", ".join(part for part in uptime_parts if part)
     except Exception:
         return "N/A"
-
-    days, remainder = divmod(total_seconds, 86400)
-    hours, remainder = divmod(remainder, 3600)
-    minutes, seconds = divmod(remainder, 60)
-
-    uptime_parts = [
-        f"{int(days)} day{'s' if days != 1 else ''}" if days else "",
-        f"{int(hours)} hr{'s' if hours != 1 else ''}" if hours else "",
-        f"{int(minutes)} min{'s' if minutes != 1 else ''}" if minutes else "",
-        f"{int(seconds)} sec{'s' if seconds != 1 else ''}" if seconds else ""
-    ]
-
-    return ", ".join(part for part in uptime_parts if part)
 
 
 def get_user() -> str:
@@ -402,6 +395,18 @@ def get_user() -> str:
         domain = hostname
 
     return f"{domain}\\{username}"
+
+
+def get_hwid() -> str:
+    """
+    Retrieves the hardware ID (HWID) and generates a SHA-256 hash.
+
+    Returns:
+        str: The SHA-256 hash of the HWID.
+    """
+
+    id = str(subprocess.check_output('wmic csproduct get uuid'), 'utf-8').split('\n')[1].strip()
+    return hashlib.sha256(id.encode('utf-8')).hexdigest()
 
 
 def get_profile() -> dict:
