@@ -230,9 +230,6 @@ def get_uptime() -> str:
     """
     Retrieves system uptime.
 
-    This function reads the system uptime from the '/proc/uptime' file and formats
-    it into a human-readable string.
-
     Returns:
         str: A string representing the system uptime in days, hours, minutes, and seconds.
             If the file cannot be read, returns an error message.
@@ -278,10 +275,10 @@ def get_user() -> str:
 
 def get_profile() -> dict:
     """
-    Gathers system profile information, including hardware, software, and OS details.
+    Gathers device profile information, including hardware, software, and OS details.
 
     Returns:
-        dict: A dictionary containing the system profile.
+        dict: A dictionary containing the device profile.
     """
 
     installed_software = get_software(
@@ -323,10 +320,10 @@ def get_profile() -> dict:
 
 def write_profile(profile: dict) -> None:
     """
-    Writes the system profile to a JSON file in the user's home directory.
+    Writes the device profile to a JSON file in the user's home directory.
 
     Args:
-        profile (dict): The system profile to write.
+        profile (dict): The device profile to write.
     """
 
     filename = 'prospector-profile-' + profile.get('hwid')[:8] + '.json'
@@ -341,17 +338,17 @@ def write_profile(profile: dict) -> None:
     try:
         with open(destination, 'w') as prospectorfile:
             prospectorfile.write(content)
-            print_success(f"Device profile written to {destination}")
+            print_success(f"Wrote new device profile to {destination}")
     except Exception as e:
-        print_error(f"Unable to write device profile: {e}")
+        print_error(f"Failed to write new device profile: {e}")
 
 
 def send_profile(profile: dict) -> None:
     """
-    Sends the system profile to the prosect profiling service API.
+    Sends the device profile to the prosect profiling service API.
 
     Args:
-        profile (dict): The system profile to send.
+        profile (dict): The device profile to send.
     """
 
     try:
@@ -364,27 +361,38 @@ def send_profile(profile: dict) -> None:
 
         urllib.request.urlopen(request, data)
 
-        print_success(f"Device profile submitted to prospect service at {PROFILE_API_URL}")
+        print_success(f"Submitted device profile to prospect service at {PROFILE_API_URL}")
     except Exception as e:
-        print_error(f"Could not send profiling data to prospect service: {e}")
+        print_error(f"Failed to send device profile to prospect service: {e}")
 
 
-def main() -> None:
+def collect_profile() -> dict:
     """
-    Main function to generate and write the system profile.
+    Main function to generate and write the device profile.
     """
 
     print_info("Collecting device profile...")
     print(" ")
 
-    profile = get_profile()
-    write_profile(profile)
-    send_profile(profile)
-    
-    print(" ")
+    try:
+        profile = get_profile()
+        write_profile(profile)
+        send_profile(profile)
+        print(" ")
+
+        return profile
+    except Exception as e:
+        print_error(f"Failed to collect device profile: {e}")
+        return {}
 
 
 if __name__ == '__main__':
-    main()
-    print_info("Press any key to exit...")
-    msvcrt.getch()
+    profile = collect_profile()
+    if profile:
+        print_info("Press 'p' to print device profile or any other key to exit...")
+    
+        key = msvcrt.getch()
+        if key.lower() == b'p':
+            print(json.dumps(profile, indent=4))
+    
+    print_info("Exiting...")
