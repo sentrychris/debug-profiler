@@ -269,20 +269,63 @@ def get_network_interfaces() -> list:
     """
     try:
         wmic = subprocess.check_output('wmic nic get Name, MACAddress, Speed, Manufacturer, Description', shell=True)
-        network_info = str(wmic, 'utf-8').strip().split('\n')[1:]
+        lines = str(wmic, 'utf-8').strip().split('\n')
+        
+        headers = re.split(r'\s{2,}', lines[0].strip())
+        headers = [header.strip().lower().replace(' ', '_') for header in headers]
+        
+        network_info = lines[1:]
         interfaces = []
-        for interface in network_info:
-            parts = [p.strip() for p in interface.split('  ') if p]
-            if len(parts) >= 5:
-                interfaces.append({
-                    'name': parts[0],
-                    'mac_address': parts[1],
-                    'description': parts[3]
-                })
+
+        for line in network_info:
+            parts = re.split(r'\s{2,}', line.strip())
+            interface = {}
+            
+            if len(parts) == 3:
+                # Case where there are three values: description, manufacturer, name
+                interface['description'] = parts[0]
+                interface['manufacturer'] = parts[1]
+                interface['name'] = parts[2]
+            else:
+                # Case where there are five values
+                for idx, header in enumerate(headers):
+                    if idx < len(parts):
+                        interface[header] = parts[idx]
+                    else:
+                        interface[header] = ''
+            
+            interfaces.append(interface)
+        
         return interfaces
     except Exception as e:
         print_error(f"Failed to get network information: {e}")
         return []
+
+
+def get_connected_wifi() -> dict:
+    """
+    Retrieves information about the currently connected Wi-Fi network using netsh.
+
+    Returns:
+        dict: A dictionary containing Wi-Fi connection details.
+    """
+
+    try:
+        wifi_info = subprocess.check_output('netsh wlan show interfaces', shell=True)
+        wifi_info = str(wifi_info, 'utf-8').strip().split('\n')
+        
+        wifi_details = {}
+        for line in wifi_info:
+            if ':' in line:
+                key, value = line.split(':', 1)
+                key = key.strip().lower().replace(' ', '_')
+                value = value.strip()
+                wifi_details[key] = value
+        
+        return wifi_details
+    except Exception as e:
+        print_error(f"Failed to get connected Wi-Fi information: {e}")
+        return {}
 
 
 def get_distribution() -> str:
@@ -399,6 +442,7 @@ def get_profile() -> dict:
             'gpus': get_gpus()
         },
         'network': {
+            'wifi': get_connected_wifi(),
             'interfaces': get_network_interfaces()
         },
         'software': {
