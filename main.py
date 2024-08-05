@@ -2,6 +2,7 @@ import argparse
 import ctypes
 import getpass
 import hashlib
+import logging
 import json
 import msvcrt
 import os
@@ -14,6 +15,9 @@ import winreg
 
 
 PROFILE_API_URL='https://prospect-api.versyx.net/api/devices/profiles'
+
+
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 
 class Terminal:
@@ -32,7 +36,7 @@ def print_success(message: str) -> None:
         message (str): The success message to print.
     """
 
-    print(f"{Terminal.GREEN}[success]{Terminal.RESET} {Terminal.WHITE}{message}{Terminal.RESET}")
+    logging.info(f"{Terminal.GREEN}[success]{Terminal.RESET} {Terminal.WHITE}{message}{Terminal.RESET}")
 
 
 def print_error(message: str) -> None:
@@ -43,7 +47,7 @@ def print_error(message: str) -> None:
         message (str): The error message to print.
     """
 
-    print(f"{Terminal.RED}[error]{Terminal.RESET} {Terminal.WHITE}{message}{Terminal.RESET}")
+    logging.error(f"{Terminal.RED}[error]{Terminal.RESET} {Terminal.WHITE}{message}{Terminal.RESET}")
 
 
 def print_info(message) -> None:
@@ -53,7 +57,7 @@ def print_info(message) -> None:
     Args:
         message (str): The informational message to print.
     """
-    print(f"{Terminal.BLUE}[info]{Terminal.RESET} {Terminal.WHITE}{message}{Terminal.RESET}")
+    logging.info(f"{Terminal.BLUE}[info]{Terminal.RESET} {Terminal.WHITE}{message}{Terminal.RESET}")
 
 
 def to_snake_case(str: str) -> str:
@@ -82,12 +86,20 @@ def open_reg_key(hive, path) -> winreg.HKEYType:
         winreg.HKEYType: The opened registry key.
     """
 
-    return winreg.OpenKey(
-        winreg.ConnectRegistry(None, hive),
-        path,
-        0,
-        winreg.KEY_READ | winreg.KEY_WOW64_64KEY
-    )
+    try:
+        return winreg.OpenKey(
+            winreg.ConnectRegistry(None, hive),
+            path,
+            0,
+            winreg.KEY_READ | winreg.KEY_WOW64_64KEY
+        )
+    except FileNotFoundError:
+        print_error(f"Registry path not found: {path}")
+    except PermissionError:
+        print_error(f"Permission denied: {path}")
+    except Exception as e:
+        print_error(f"Failed to open registry key: {e}")
+    return None
 
 
 def get_bios() -> dict:
@@ -98,18 +110,22 @@ def get_bios() -> dict:
         dict: A dictionary containing BIOS model and firmware version.
     """
 
-    reg_key = open_reg_key(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System")
-    reg_key_b = open_reg_key(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System\BIOS")
-    version = winreg.QueryValueEx(reg_key, "SystemBiosVersion")
-    model = [
-        winreg.QueryValueEx(reg_key_b, "BaseBoardManufacturer")[0],
-        winreg.QueryValueEx(reg_key_b, "BaseBoardProduct")[0]
-    ]
+    try:
+        reg_key = open_reg_key(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System")
+        reg_key_b = open_reg_key(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System\BIOS")
+        version = winreg.QueryValueEx(reg_key, "SystemBiosVersion")
+        model = [
+            winreg.QueryValueEx(reg_key_b, "BaseBoardManufacturer")[0],
+            winreg.QueryValueEx(reg_key_b, "BaseBoardProduct")[0]
+        ]
 
-    return {
-        'model': ' '.join(model),
-        'firmware': ' '.join(version[0]),
-    }
+        return {
+            'model': ' '.join(model),
+            'firmware': ' '.join(version[0]),
+        }
+    except Exception as e:
+        print_error(f"Failed to get BIOS information: {e}")
+        return {}
 
 
 def get_software(hive, flag) -> list:
@@ -124,32 +140,36 @@ def get_software(hive, flag) -> list:
         list: A list of dictionaries, each containing software details.
     """
 
-    reg_key = winreg.OpenKey(
-        winreg.ConnectRegistry(None, hive),
-        r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
-        0,
-        winreg.KEY_READ | flag
-    )
-    count_subkey = winreg.QueryInfoKey(reg_key)[0]
-    software_list = []
-    for i in range(count_subkey):
-        software = {}
-        try:
-            sub_key = winreg.OpenKey(reg_key, winreg.EnumKey(reg_key, i))
-            software['name'] = winreg.QueryValueEx(sub_key, "DisplayName")[0]
+    try:
+        reg_key = winreg.OpenKey(
+            winreg.ConnectRegistry(None, hive),
+            r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+            0,
+            winreg.KEY_READ | flag
+        )
+        count_subkey = winreg.QueryInfoKey(reg_key)[0]
+        software_list = []
+        for i in range(count_subkey):
+            software = {}
             try:
-                software['version'] = winreg.QueryValueEx(sub_key, "DisplayVersion")[0]
+                sub_key = winreg.OpenKey(reg_key, winreg.EnumKey(reg_key, i))
+                software['name'] = winreg.QueryValueEx(sub_key, "DisplayName")[0]
+                try:
+                    software['version'] = winreg.QueryValueEx(sub_key, "DisplayVersion")[0]
+                except EnvironmentError:
+                    software['version'] = 'undefined'
+                try:
+                    software['publisher'] = winreg.QueryValueEx(sub_key, "Publisher")[0]
+                except EnvironmentError:
+                    software['publisher'] = 'undefined'
+                software_list.append(software)
             except EnvironmentError:
-                software['version'] = 'undefined'
-            try:
-                software['publisher'] = winreg.QueryValueEx(sub_key, "Publisher")[0]
-            except EnvironmentError:
-                software['publisher'] = 'undefined'
-            software_list.append(software)
-        except EnvironmentError:
-            continue
+                continue
 
-    return software_list
+        return software_list
+    except Exception as e:
+        print_error(f"Failed to get software information: {e}")
+        return []
 
 
 def get_memory() -> list:
@@ -347,7 +367,8 @@ def get_distribution() -> str:
         distro = str(os, "latin-1")
 
         return re.search("OS Name:\s*(.*)", distro).group(1).strip()
-    except:
+    except Exception as e:
+        print_error(f"Failed to get distribution information: {e}")
         return "N/A"
 
 
@@ -375,7 +396,8 @@ def get_uptime() -> str:
         ]
 
         return ", ".join(part for part in uptime_parts if part)
-    except Exception:
+    except Exception as e:
+        print_error(f"Failed to get system uptime: {e}")
         return "N/A"
 
 
@@ -387,14 +409,18 @@ def get_user() -> str:
         str: The full username in the format 'DOMAIN\\username' or 'MACHINE\\username'.
     """
 
-    username = getpass.getuser()
-    hostname = socket.gethostname()
+    try:
+        username = getpass.getuser()
+        hostname = socket.gethostname()
 
-    domain = os.getenv('USERDOMAIN')
-    if domain is None:
-        domain = hostname
+        domain = os.getenv('USERDOMAIN')
+        if domain is None:
+            domain = hostname
 
-    return f"{domain}\\{username}"
+        return f"{domain}\\{username}"
+    except Exception as e:
+        print_error(f"Failed to get user information: {e}")
+        return "N/A"
 
 
 def get_hwid() -> str:
@@ -405,8 +431,12 @@ def get_hwid() -> str:
         str: The SHA-256 hash of the HWID.
     """
 
-    id = str(subprocess.check_output('wmic csproduct get uuid'), 'utf-8').split('\n')[1].strip()
-    return hashlib.sha256(id.encode('utf-8')).hexdigest()
+    try:
+        id = str(subprocess.check_output('wmic csproduct get uuid'), 'utf-8').split('\n')[1].strip()
+        return hashlib.sha256(id.encode('utf-8')).hexdigest()
+    except Exception as e:
+        print_error(f"Failed to get HWID: {e}")
+        return "N/A"
 
 
 def get_profile() -> dict:
