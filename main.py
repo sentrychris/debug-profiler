@@ -1,11 +1,58 @@
+import ctypes
+import getpass
 import hashlib
 import json
 import msvcrt
 import os
 import platform
 import re
+import socket
 import subprocess
+import urllib.request
 import winreg
+
+
+PROFILE_API_URL='https://prospect-api.versyx.net/api/devices/profiles'
+
+
+class Color:
+    GREEN = '\033[92m'
+    RED = '\033[91m'
+    WHITE = '\033[97m'
+    BLUE = '\033[96m'
+    RESET = '\033[0m'
+
+
+def print_success(message: str) -> None:
+    """
+    Prints a success message in the terminal with the "[success]" label.
+
+    Args:
+        message (str): The success message to print.
+    """
+
+    print(f"{Color.GREEN}[success]{Color.RESET} {Color.WHITE}{message}{Color.RESET}")
+
+
+def print_error(message: str) -> None:
+    """
+    Prints an error message in the terminal with the "[error]" label.
+
+    Args:
+        message (str): The error message to print.
+    """
+
+    print(f"{Color.RED}[error]{Color.RESET} {Color.WHITE}{message}{Color.RESET}")
+
+
+def print_info(message) -> None:
+    """
+    Prints an informational message in the terminal with the "[info]" label in sky blue and the message in white.
+
+    Args:
+        message (str): The informational message to print.
+    """
+    print(f"{Color.BLUE}[info]{Color.RESET} {Color.WHITE}{message}{Color.RESET}")
 
 
 def to_snake_case(str: str) -> str:
@@ -166,17 +213,67 @@ def get_distribution() -> str:
     return re.search("OS Name:\s*(.*)", os).group(1).strip()
 
 
-def get_hwid() -> hashlib._hashlib.HASH:
+def get_hwid() -> str:
     """
     Retrieves the hardware ID (HWID) and generates a SHA-256 hash.
 
     Returns:
-        hashlib._hashlib.HASH: The SHA-256 hash of the HWID.
+        str: The SHA-256 hash of the HWID.
     """
 
     id = str(subprocess.check_output('wmic csproduct get uuid'), 'utf-8').split('\n')[1].strip()
     
-    return hashlib.sha256(id.encode('utf-8'))
+    return hashlib.sha256(id.encode('utf-8')).hexdigest()
+
+
+def get_uptime() -> str:
+    """
+    Retrieves system uptime.
+
+    This function reads the system uptime from the '/proc/uptime' file and formats
+    it into a human-readable string.
+
+    Returns:
+        str: A string representing the system uptime in days, hours, minutes, and seconds.
+            If the file cannot be read, returns an error message.
+    """
+
+    try:
+        uptime_ms = ctypes.windll.kernel32.GetTickCount64()
+        total_seconds = uptime_ms / 1000.0
+    except Exception:
+        return "N/A"
+
+    days, remainder = divmod(total_seconds, 86400)
+    hours, remainder = divmod(remainder, 3600)
+    minutes, seconds = divmod(remainder, 60)
+
+    uptime_parts = [
+        f"{int(days)} day{'s' if days != 1 else ''}" if days else "",
+        f"{int(hours)} hr{'s' if hours != 1 else ''}" if hours else "",
+        f"{int(minutes)} min{'s' if minutes != 1 else ''}" if minutes else "",
+        f"{int(seconds)} sec{'s' if seconds != 1 else ''}" if seconds else ""
+    ]
+
+    return ", ".join(part for part in uptime_parts if part)
+
+
+def get_user() -> str:
+    """
+    Retrieves the full username in the format 'DOMAIN\\username' or 'MACHINE\\username'.
+
+    Returns:
+        str: The full username in the format 'DOMAIN\\username' or 'MACHINE\\username'.
+    """
+
+    username = getpass.getuser()
+    hostname = socket.gethostname()
+
+    domain = os.getenv('USERDOMAIN')
+    if domain is None:
+        domain = hostname
+    
+    return f"{domain}\\{username}"
 
 
 def get_profile() -> dict:
@@ -197,17 +294,15 @@ def get_profile() -> dict:
 
 
     profile = {
-        'hwid': get_hwid().hexdigest(),
+        'hwid': get_hwid(),
         'hostname': platform.node(),
+        'user': get_user(),
+        'uptime': get_uptime(),
         'os': {
             'platform': platform.system(),
             'distribution': get_distribution(),
             'arch': platform.architecture()[0],
             'version': platform.version(),
-        },
-        'software': {
-            'programs': installed_software,
-            'num_installed': len(installed_software)
         },
         'hardware': {
             'bios': get_bios(),
@@ -216,13 +311,17 @@ def get_profile() -> dict:
                 'cores': os.cpu_count(),
             },
             'ram': get_memory()
-        }    
+        },
+        'software': {
+            'programs': installed_software,
+            'num_installed': len(installed_software)
+        }   
     }
 
     return profile
 
 
-def write_profile(profile: dict):
+def write_profile(profile: dict) -> None:
     """
     Writes the system profile to a JSON file in the user's home directory.
 
@@ -239,22 +338,53 @@ def write_profile(profile: dict):
     content = json.dumps(profile, sort_keys=False, indent=4)
     destination = os.path.join(filepath, filename)
 
-    with open(destination, 'w') as prospectorfile:
-        prospectorfile.write(content)
-        print('device profile written to ' + destination)
+    try:
+        with open(destination, 'w') as prospectorfile:
+            prospectorfile.write(content)
+            print_success(f"Device profile written to {destination}")
+    except Exception as e:
+        print_error(f"Unable to write device profile: {e}")
 
 
-def main():
+def send_profile(profile: dict) -> None:
+    """
+    Sends the system profile to the prosect profiling service API.
+
+    Args:
+        profile (dict): The system profile to send.
+    """
+
+    try:
+        content = json.dumps(profile, sort_keys=False, indent=4)
+        request = urllib.request.Request(PROFILE_API_URL)
+        request.add_header('Content-Type', 'application/json; charset=utf-8')
+        request.add_header('Authorization', 'Bearer c2VjcmV0')
+        data = content.encode('utf-8')
+        request.add_header('Content-Length', len(data))
+
+        urllib.request.urlopen(request, data)
+
+        print_success(f"Device profile submitted to prospect service at {PROFILE_API_URL}")
+    except Exception as e:
+        print_error(f"Could not send profiling data to prospect service: {e}")
+
+
+def main() -> None:
     """
     Main function to generate and write the system profile.
     """
 
+    print_info("Collecting device profile...")
+    print(" ")
+
     profile = get_profile()
-    print(json.dumps(profile, sort_keys=False, indent=4))
     write_profile(profile)
+    send_profile(profile)
+    
+    print(" ")
 
 
 if __name__ == '__main__':
     main()
-    print("Press any key to exit...")
+    print_info("Press any key to exit...")
     msvcrt.getch()
