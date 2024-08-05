@@ -16,7 +16,7 @@ import winreg
 PROFILE_API_URL='https://prospect-api.versyx.net/api/devices/profiles'
 
 
-class Color:
+class Terminal:
     GREEN = '\033[92m'
     RED = '\033[91m'
     WHITE = '\033[97m'
@@ -32,7 +32,7 @@ def print_success(message: str) -> None:
         message (str): The success message to print.
     """
 
-    print(f"{Color.GREEN}[success]{Color.RESET} {Color.WHITE}{message}{Color.RESET}")
+    print(f"{Terminal.GREEN}[success]{Terminal.RESET} {Terminal.WHITE}{message}{Terminal.RESET}")
 
 
 def print_error(message: str) -> None:
@@ -43,7 +43,7 @@ def print_error(message: str) -> None:
         message (str): The error message to print.
     """
 
-    print(f"{Color.RED}[error]{Color.RESET} {Color.WHITE}{message}{Color.RESET}")
+    print(f"{Terminal.RED}[error]{Terminal.RESET} {Terminal.WHITE}{message}{Terminal.RESET}")
 
 
 def print_info(message) -> None:
@@ -53,7 +53,7 @@ def print_info(message) -> None:
     Args:
         message (str): The informational message to print.
     """
-    print(f"{Color.BLUE}[info]{Color.RESET} {Color.WHITE}{message}{Color.RESET}")
+    print(f"{Terminal.BLUE}[info]{Terminal.RESET} {Terminal.WHITE}{message}{Terminal.RESET}")
 
 
 def to_snake_case(str: str) -> str:
@@ -195,6 +195,96 @@ def get_memory() -> list:
     return devices
 
 
+def get_disks() -> list:
+    """
+    Retrieves disk information using WMIC.
+
+    Returns:
+        list: A list of dictionaries, each containing disk details.
+    """
+    try:
+        wmic = subprocess.check_output(
+            'wmic diskdrive get Model, Size, MediaType, SerialNumber, Status', shell=True
+        )
+        disk_info = str(wmic, 'utf-8').strip().split('\n')
+        disks = []
+        
+        for disk in disk_info[1:]:
+            parts = [p.strip() for p in disk.split() if p]
+            
+            if len(parts) >= 5:
+                model = ' '.join(parts[:-4])
+                size = parts[-2]
+                try:
+                    size = int(size) // (1024**3)
+                except ValueError:
+                    size = parts[-2]
+                
+                disks.append({
+                    'model': model,
+                    'size_gb': size,
+                    'media_type': parts[-5],
+                    'serial_number': parts[-4],
+                    'status': parts[-1]
+                })
+        
+        return disks
+    except Exception as e:
+        print_error(f"Failed to get disk information: {e}")
+        return []
+
+
+def get_gpus() -> list:
+    """
+    Retrieves GPU information using WMIC.
+
+    Returns:
+        list: A list of dictionaries, each containing GPU details.
+    """
+
+    try:
+        wmic = subprocess.check_output('wmic path win32_VideoController get Name, DriverVersion, Status', shell=True)
+        gpu_info = str(wmic, 'utf-8').strip().split('\n')[1:]
+        gpus = []
+        for gpu in gpu_info:
+            parts = [p.strip() for p in gpu.split('  ') if p]
+            if len(parts) == 3:
+                gpus.append({
+                    'name': parts[1],
+                    'driver_version': parts[0],
+                    'status': parts[2]
+                })
+        return gpus
+    except Exception as e:
+        print_error(f"Failed to get GPU information: {e}")
+        return []
+
+
+def get_network_interfaces() -> list:
+    """
+    Retrieves network interface information using WMIC.
+
+    Returns:
+        list: A list of dictionaries, each containing network interface details.
+    """
+    try:
+        wmic = subprocess.check_output('wmic nic get Name, MACAddress, Speed, Manufacturer, Description', shell=True)
+        network_info = str(wmic, 'utf-8').strip().split('\n')[1:]
+        interfaces = []
+        for interface in network_info:
+            parts = [p.strip() for p in interface.split('  ') if p]
+            if len(parts) >= 5:
+                interfaces.append({
+                    'name': parts[0],
+                    'mac_address': parts[1],
+                    'description': parts[3]
+                })
+        return interfaces
+    except Exception as e:
+        print_error(f"Failed to get network information: {e}")
+        return []
+
+
 def get_distribution() -> str:
     """
     Retrieves the operating system distribution name.
@@ -304,7 +394,12 @@ def get_profile() -> dict:
                 'name': platform.processor(),
                 'cores': os.cpu_count(),
             },
-            'ram': get_memory()
+            'ram': get_memory(),
+            'disks': get_disks(),
+            'gpus': get_gpus()
+        },
+        'network': {
+            'interfaces': get_network_interfaces()
         },
         'software': {
             'programs': installed_software,
