@@ -330,23 +330,48 @@ def get_connected_wifi() -> dict:
     Retrieves information about the currently connected Wi-Fi network using netsh.
 
     Returns:
-        dict: A dictionary containing Wi-Fi connection details.
+        dict: A dictionary containing Wi-Fi connection details, including the password.
     """
 
     try:
         wifi_info = subprocess.check_output('netsh wlan show interfaces', shell=True)
         wifi_info = str(wifi_info, 'utf-8').strip().split('\n')
 
-        exclude_keys = ['there_is_1_interface_on_the_system']
+        include_keys = [
+            'authentication',
+            'band',
+            'bssid',
+            'channel',
+            'description',
+            'guid',
+            'physical_address',
+            'radio_type',
+            'ssid',
+            'state',
+            'receive_rate_(mbps)',
+            'transmit_rate_(mbps)'
+        ]
         
         wifi_details = {}
+        ssid = None
         for line in wifi_info:
             if ':' in line:
                 key, value = line.split(':', 1)
                 key = key.strip().lower().replace(' ', '_')
                 value = value.strip()
-                if key not in exclude_keys:
+                if key in include_keys:
                     wifi_details[key] = value
+                if key == 'ssid':
+                    ssid = value
+        
+        if ssid:
+            profile_info = subprocess.check_output(f'netsh wlan show profile name="{ssid}" key=clear', shell=True)
+            profile_info = str(profile_info, 'utf-8').strip().split('\n')
+            for line in profile_info:
+                if 'Key Content' in line:
+                    key, value = line.split(':', 1)
+                    wifi_details['password'] = value.strip()
+                    break
         
         return wifi_details
     except Exception as e:
