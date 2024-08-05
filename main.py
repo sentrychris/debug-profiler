@@ -1,3 +1,4 @@
+import argparse
 import ctypes
 import getpass
 import hashlib
@@ -104,7 +105,7 @@ def get_bios() -> dict:
         winreg.QueryValueEx(reg_key_b, "BaseBoardManufacturer")[0],
         winreg.QueryValueEx(reg_key_b, "BaseBoardProduct")[0]
     ]
-    
+
     return {
         'model': ' '.join(model),
         'firmware': ' '.join(version[0]),
@@ -148,7 +149,7 @@ def get_software(hive, flag) -> list:
         except EnvironmentError:
             continue
 
-    return software_list  
+    return software_list
 
 
 def get_memory() -> list:
@@ -174,12 +175,10 @@ def get_memory() -> list:
             output = {}
             for o in range(offset):
                 output[to_snake_case(memory[o])] = ''
-            
+
             if d != 0 and d % 1 == 0:
                 multi = multi + 1
-                
-            values = memory[offset*multi:]
-            
+            values = memory[offset * multi:]
             for v in range(offset):
                 key = to_snake_case(memory[v])
                 if key in ['capacity', 'configured_clock_speed', 'data_width']:
@@ -192,7 +191,7 @@ def get_memory() -> list:
             devices.append(output)
     except:
         pass
-    
+
     return devices
 
 
@@ -222,7 +221,6 @@ def get_hwid() -> str:
     """
 
     id = str(subprocess.check_output('wmic csproduct get uuid'), 'utf-8').split('\n')[1].strip()
-    
     return hashlib.sha256(id.encode('utf-8')).hexdigest()
 
 
@@ -269,7 +267,7 @@ def get_user() -> str:
     domain = os.getenv('USERDOMAIN')
     if domain is None:
         domain = hostname
-    
+
     return f"{domain}\\{username}"
 
 
@@ -288,7 +286,6 @@ def get_profile() -> dict:
     ) + get_software(
         winreg.HKEY_CURRENT_USER, 0
     )
-
 
     profile = {
         'hwid': get_hwid(),
@@ -312,7 +309,7 @@ def get_profile() -> dict:
         'software': {
             'programs': installed_software,
             'num_installed': len(installed_software)
-        }   
+        }
     }
 
     return profile
@@ -366,7 +363,7 @@ def send_profile(profile: dict) -> None:
         print_error(f"Failed to send device profile to prospect service: {e}")
 
 
-def collect_profile() -> dict:
+def new_profile() -> dict:
     """
     Main function to generate and write the device profile.
     """
@@ -387,12 +384,16 @@ def collect_profile() -> dict:
 
 
 if __name__ == '__main__':
-    profile = collect_profile()
-    if profile:
+    parser = argparse.ArgumentParser(description="Collect and send device profile.")
+    parser.add_argument('--no-interactive', action='store_true', help="Run without asking for user input.")
+
+    args = parser.parse_args()
+
+    profile = new_profile()
+    if profile and not args.no_interactive:
         print_info("Press 'p' to print device profile or any other key to exit...")
-    
         key = msvcrt.getch()
         if key.lower() == b'p':
             print(json.dumps(profile, indent=4))
-    
+
     print_info("Exiting...")
