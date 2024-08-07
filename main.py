@@ -15,6 +15,7 @@ import winreg
 
 
 AUTH_LOGIN_API_URL="http://localhost:8080/api/auth/login"
+AUTH_REFRESH_API_URL="http://localhost:8080/api/auth/refresh"
 PROFILE_API_URL="http://localhost:8080/api/devices/profiles"
 REGISTRY_PATH=r"Software\Prospector"
 
@@ -91,7 +92,7 @@ def open_reg_key(hive, path, create=False) -> winreg.HKEYType:
 
     try:
         permissions = winreg.KEY_READ | winreg.KEY_WOW64_64KEY
-        if (create):
+        if create:
             permissions |= winreg.KEY_WRITE | winreg.KEY_CREATE_SUB_KEY
 
         return winreg.OpenKey(
@@ -641,6 +642,42 @@ def authenticate_user(username: str, password: str) -> str:
         raise
 
 
+def refresh_access_token(refresh_token: str) -> dict:
+    """
+    Refreshes the access token using the refresh token.
+
+    Args:
+        refresh_token (str): The refresh token.
+
+    Returns:
+        dict: The authentication response containing new tokens.
+
+    Raises:
+        urllib.error.HTTPError: If an HTTP error occurs during token refresh.
+        Exception: If an unexpected error occurs during token refresh.
+    """
+    try:
+        refresh_data = json.dumps({
+            'refresh_token': refresh_token
+        }).encode("utf-8")
+
+        refresh_request = urllib.request.Request(AUTH_REFRESH_API_URL)
+        refresh_request.add_header('Content-Type', 'application/json; charset=utf-8')
+        refresh_request.add_header('Content-Length', len(refresh_data))
+
+        with urllib.request.urlopen(refresh_request, refresh_data) as response:
+            response_data = json.load(response)
+            print_success(f"Successfully refreshed access token with prospector service at {AUTH_REFRESH_API_URL}")
+
+            return response_data
+    except urllib.error.HTTPError as e:
+        print_error(f"Failed to refresh access token: {e}")
+        raise
+    except Exception as e:
+        print_error(f"Unexpected error during token refresh: {e}")
+        raise
+
+
 def get_access_token():
     """
     Retrieves the access token from the registry or prompts for user credentials to obtain a new token.
@@ -686,9 +723,26 @@ def send_profile(access_token: str, profile: dict) -> None:
 
         print_success(f"Submitted device profile to prospector service at {PROFILE_API_URL}")
     except urllib.error.HTTPError as e:
-        print_error(f"Failed to send device profile to profile service: {e}")
+        if e.code == 401:
+            print_info(f"Access token expired. Refreshing token...")
+
+            refresh_token = get_token_from_registry("RefreshToken")
+            if not refresh_token:
+                print_error("Refresh token not found. Please authenticate again.")
+                raise
+
+            auth_response = refresh_access_token(refresh_token)
+            set_token_in_registry("AccessToken", auth_response['access_token'])
+            set_token_in_registry("RefreshToken", auth_response['refresh_token'])
+
+            # Retry sending the profile with the new access token
+            send_profile(auth_response['access_token'], profile)
+        else:
+            print_error(f"Failed to send device profile to profile service: {e}")
+            raise
     except Exception as e:
         print_error(f"Unexpected error during profile submission: {e}")
+        raise
 
 
 def new_profile(access_token: str) -> dict:
