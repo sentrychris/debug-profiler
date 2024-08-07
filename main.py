@@ -83,17 +83,22 @@ def open_reg_key(hive, path, create=False) -> winreg.HKEYType:
     Args:
         hive: The registry hive (e.g., winreg.HKEY_LOCAL_MACHINE).
         path (str): The registry path.
+        create (bool): Whether or not we are creating keys
 
     Returns:
         winreg.HKEYType: The opened registry key.
     """
 
     try:
+        permissions = winreg.KEY_READ | winreg.KEY_WOW64_64KEY
+        if (create):
+            permissions |= winreg.KEY_WRITE | winreg.KEY_CREATE_SUB_KEY
+
         return winreg.OpenKey(
             winreg.ConnectRegistry(None, hive),
             path,
             0,
-            winreg.KEY_READ | winreg.KEY_WOW64_64KEY
+            permissions
         )
     except FileNotFoundError:
         if create:
@@ -548,26 +553,26 @@ def write_profile(profile: dict) -> None:
         print_error(f"Failed to write new device profile: {e}")
 
 
-def get_access_token_from_registry() -> str:
+def get_token_from_registry(token_type: str) -> str:
     try:
         reg_key = open_reg_key(winreg.HKEY_CURRENT_USER, REGISTRY_PATH)
         if reg_key:
-            access_token, _ = winreg.QueryValueEx(reg_key, "AccessToken")
-            return access_token
+            token, _ = winreg.QueryValueEx(reg_key, token_type)
+            winreg.CloseKey(reg_key)
+            return token
     except Exception as e:
-        print_error(f"Failed to get access token from registry: {e}")
+        print_error(f"Failed to get {token_type} from registry: {e}")
     return None
 
 
-
-def set_access_token_in_registry(access_token: str) -> None:
+def set_token_in_registry(token_type: str, token: str) -> None:
     try:
         reg_key = open_reg_key(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, create=True)
-        winreg.SetValueEx(reg_key, "AccessToken", 0, winreg.REG_SZ, access_token)
+        winreg.SetValueEx(reg_key, token_type, 0, winreg.REG_SZ, token)
         winreg.CloseKey(reg_key)
-        print_success("Access token saved to registry.")
+        print_success(f"{token_type} saved to registry.")
     except Exception as e:
-        print_error(f"Failed to save access token to registry: {e}")
+        print_error(f"Failed to save {token_type} to registry: {e}")
 
 
 def authenticate_user(username: str, password: str) -> str:
@@ -592,7 +597,7 @@ def authenticate_user(username: str, password: str) -> str:
             response_data = json.load(response)
             print_success(f"Successfully authenticated with prospector service at {AUTH_LOGIN_API_URL}")
 
-            return response_data['access_token']
+            return response_data
     except urllib.error.HTTPError as e:
         print_error(f"Failed to get access token: {e}")
         raise
@@ -602,14 +607,16 @@ def authenticate_user(username: str, password: str) -> str:
 
 
 def get_access_token():
-    access_token = get_access_token_from_registry()
+    access_token = get_token_from_registry("AccessToken")
     if not access_token:
         if not args.user:
             args.user = input("Enter your username: ")
         password = getpass.getpass(prompt="Enter your password: ")
 
-        access_token = authenticate_user(args.user, password)
-        set_access_token_in_registry(access_token)
+        auth_response = authenticate_user(args.user, password)
+        set_token_in_registry("AccessToken", auth_response['access_token'])
+        set_token_in_registry("RefreshToken", auth_response['refresh_token'])
+        access_token = auth_response['access_token']
     
     return access_token
 
