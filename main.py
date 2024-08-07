@@ -7,9 +7,6 @@ from app.profile_handler import get_profile, write_profile, send_profile
 from app.output_handler import print_info, print_error
 
 
-PROFILE_API_URL="https://prospect-api.versyx.net/api/devices/profiles"
-
-
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 
