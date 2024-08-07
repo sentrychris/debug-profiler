@@ -14,8 +14,9 @@ import urllib.request
 import winreg
 
 
-AUTH_LOGIN_API_URL='http://localhost:8080/api/auth/login'
-PROFILE_API_URL='http://localhost:8080/api/devices/profiles'
+AUTH_LOGIN_API_URL="http://localhost:8080/api/auth/login"
+PROFILE_API_URL="http://localhost:8080/api/devices/profiles"
+REGISTRY_PATH=r"Software\Prospector"
 
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
@@ -75,7 +76,7 @@ def to_snake_case(str: str) -> str:
     return re.sub(r'(?<!^)(?=[A-Z])', '_', str).lower()
 
 
-def open_reg_key(hive, path) -> winreg.HKEYType:
+def open_reg_key(hive, path, create=False) -> winreg.HKEYType:
     """
     Opens a registry key.
 
@@ -95,12 +96,17 @@ def open_reg_key(hive, path) -> winreg.HKEYType:
             winreg.KEY_READ | winreg.KEY_WOW64_64KEY
         )
     except FileNotFoundError:
-        print_error(f"Registry path not found: {path}")
+        if create:
+            return winreg.CreateKey(hive, path)
+        else:
+            print_error(f"Registry path not found: {path}")
+            return None
     except PermissionError:
         print_error(f"Permission denied: {path}")
+        return None
     except Exception as e:
         print_error(f"Failed to open registry key: {e}")
-    return None
+        return None
 
 
 def get_bios() -> dict:
@@ -542,7 +548,29 @@ def write_profile(profile: dict) -> None:
         print_error(f"Failed to write new device profile: {e}")
 
 
-def get_access_token(username: str, password: str) -> str:
+def get_access_token_from_registry() -> str:
+    try:
+        reg_key = open_reg_key(winreg.HKEY_CURRENT_USER, REGISTRY_PATH)
+        if reg_key:
+            access_token, _ = winreg.QueryValueEx(reg_key, "AccessToken")
+            return access_token
+    except Exception as e:
+        print_error(f"Failed to get access token from registry: {e}")
+    return None
+
+
+
+def set_access_token_in_registry(access_token: str) -> None:
+    try:
+        reg_key = open_reg_key(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, create=True)
+        winreg.SetValueEx(reg_key, "AccessToken", 0, winreg.REG_SZ, access_token)
+        winreg.CloseKey(reg_key)
+        print_success("Access token saved to registry.")
+    except Exception as e:
+        print_error(f"Failed to save access token to registry: {e}")
+
+
+def authenticate_user(username: str, password: str) -> str:
     """
     Authenticate and obtain an access token.
 
@@ -573,7 +601,20 @@ def get_access_token(username: str, password: str) -> str:
         raise
 
 
-def send_profile(username: str, password: str, profile: dict) -> None:
+def get_access_token():
+    access_token = get_access_token_from_registry()
+    if not access_token:
+        if not args.user:
+            args.user = input("Enter your username: ")
+        password = getpass.getpass(prompt="Enter your password: ")
+
+        access_token = authenticate_user(args.user, password)
+        set_access_token_in_registry(access_token)
+    
+    return access_token
+
+
+def send_profile(access_token: str, profile: dict) -> None:
     """
     Sends the device profile to the prosect profiling service API.
 
@@ -582,8 +623,6 @@ def send_profile(username: str, password: str, profile: dict) -> None:
     """
 
     try:
-        access_token = get_access_token(username, password)
-
         profile_data = json.dumps(profile, sort_keys=False, indent=4).encode('utf-8')
 
         profile_request = urllib.request.Request(PROFILE_API_URL)
@@ -600,7 +639,7 @@ def send_profile(username: str, password: str, profile: dict) -> None:
         print_error(f"Unexpected error during profile submission: {e}")
 
 
-def new_profile(username: str, password: str) -> dict:
+def new_profile(access_token: str) -> dict:
     """
     Main function to generate and write the device profile.
     """
@@ -610,8 +649,8 @@ def new_profile(username: str, password: str) -> dict:
     try:
         profile = get_profile()
 
-        write_profile(profile)
-        send_profile(username, password, profile)
+        write_profile(profile)        
+        send_profile(access_token, profile)
 
         return profile
     except Exception as e:
@@ -623,11 +662,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Collect and send device profile.")
     parser.add_argument('--no-interactive', action="store_true", help="Run without asking for user input.")
     parser.add_argument('--user', type=str, help="Specify your prospector username.")
-    parser.add_argument('--password', type=str, help="Specify your prospector password.")
-
     args = parser.parse_args()
 
-    profile = new_profile(args.user, args.password)
+    access_token = get_access_token()
+
+    profile = new_profile(access_token)
     if profile and not args.no_interactive:
         print_info("Press 'p' to print device profile or any other key to exit...")
         key = msvcrt.getch()
