@@ -6,11 +6,29 @@ from app.auth_handler import get_access_token
 from app.profile_handler import get_profile, write_profile, send_profile
 from app.output_handler import print_info, print_error
 
-
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 
 def run_prospector(send_to_service: bool) -> dict:
+    """
+    Collects device profile information, writes it to a file, and optionally sends it to the prospector service.
+
+    This function gathers comprehensive information about the device, including hardware, software, and OS details.
+    It then writes this information to a JSON file. If the `send_to_service` flag is set to True, it retrieves an 
+    access token and sends the profile to the prospector service.
+
+    Args:
+        send_to_service (bool): A flag indicating whether to send the device profile to the prospector service.
+
+    Returns:
+        dict: A dictionary containing the collected device profile. If an error occurs during the collection process,
+              an empty dictionary is returned.
+
+    Raises:
+        Exception: If there is an unexpected error during the profile collection or sending process. The error is 
+                   caught, and an error message is printed.
+    """
+
     print_info("Collecting device profile...")
 
     try:
