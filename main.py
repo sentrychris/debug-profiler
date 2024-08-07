@@ -18,7 +18,7 @@ import winreg
 AUTH_LOGIN_API_URL="https://prospect-api.versyx.net/api/auth/login"
 AUTH_REFRESH_API_URL="https://prospect-api.versyx.net/api/auth/refresh"
 PROFILE_API_URL="https://prospect-api.versyx.net/api/devices/profiles"
-SERVICE_NAME = "ProspectorService"
+SERVICE_NAME = "ProspectorDeviceProfilingService"
 
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
@@ -570,7 +570,7 @@ def get_token_from_credential_manager(token_type: str) -> str:
     """
 
     try:
-        return keyring.get_password(SERVICE_NAME, token_type)
+        return keyring.get_password(f"{SERVICE_NAME}/{token_type}", token_type)
     except Exception as e:
         print_error(f"Failed to get {token_type} from credential manager: {e}")
     return None
@@ -592,7 +592,7 @@ def set_token_in_credential_manager(token_type: str, token: str) -> None:
     """
 
     try:
-        keyring.set_password(SERVICE_NAME, token_type, token)
+        keyring.set_password(f"{SERVICE_NAME}/{token_type}", token_type, token)
         print_success(f"{token_type} saved to credential manager.")
     except Exception as e:
         print_error(f"Failed to save {token_type} to credential manager: {e}")
