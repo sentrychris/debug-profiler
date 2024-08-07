@@ -14,7 +14,8 @@ import urllib.request
 import winreg
 
 
-PROFILE_API_URL='https://prospect-api.versyx.net/api/devices/profiles'
+AUTH_LOGIN_API_URL='http://localhost:8080/api/auth/login'
+PROFILE_API_URL='http://localhost:8080/api/devices/profiles'
 
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
@@ -223,6 +224,7 @@ def get_disks() -> list:
     Returns:
         list: A list of dictionaries, each containing disk details.
     """
+
     try:
         wmic = subprocess.check_output(
             'wmic diskdrive get Model, Size, MediaType, SerialNumber, Status', shell=True
@@ -508,7 +510,8 @@ def get_profile() -> dict:
         'software': {
             'programs': installed_software,
             'num_installed': len(installed_software)
-        }
+        },
+        'source_api': PROFILE_API_URL
     }
 
     return profile
@@ -539,7 +542,38 @@ def write_profile(profile: dict) -> None:
         print_error(f"Failed to write new device profile: {e}")
 
 
-def send_profile(profile: dict) -> None:
+def get_access_token(username: str, password: str) -> str:
+    """
+    Authenticate and obtain an access token.
+
+    Returns:
+        str: The access token.
+    """
+
+    try:
+        login_data = json.dumps({
+            'email': username,
+            'password': password
+        }).encode("utf-8")
+
+        login_request = urllib.request.Request(AUTH_LOGIN_API_URL)
+        login_request.add_header('Content-Type', 'application/json; charset=utf-8')
+        login_request.add_header('Content-Length', len(login_data))
+
+        with urllib.request.urlopen(login_request, login_data) as response:
+            response_data = json.load(response)
+            print_success(f"Successfully authenticated with prospector service at {AUTH_LOGIN_API_URL}")
+
+            return response_data['access_token']
+    except urllib.error.HTTPError as e:
+        print_error(f"Failed to get access token: {e}")
+        raise
+    except Exception as e:
+        print_error(f"Unexpected error during authentication: {e}")
+        raise
+
+
+def send_profile(username: str, password: str, profile: dict) -> None:
     """
     Sends the device profile to the prosect profiling service API.
 
@@ -548,33 +582,36 @@ def send_profile(profile: dict) -> None:
     """
 
     try:
-        content = json.dumps(profile, sort_keys=False, indent=4)
-        request = urllib.request.Request(PROFILE_API_URL)
-        request.add_header('Content-Type', 'application/json; charset=utf-8')
-        request.add_header('Authorization', 'Bearer c2VjcmV0')
-        data = content.encode('utf-8')
-        request.add_header('Content-Length', len(data))
+        access_token = get_access_token(username, password)
 
-        urllib.request.urlopen(request, data)
+        profile_data = json.dumps(profile, sort_keys=False, indent=4).encode('utf-8')
 
-        print_success(f"Submitted device profile to prospect service at {PROFILE_API_URL}")
+        profile_request = urllib.request.Request(PROFILE_API_URL)
+        profile_request.add_header('Content-Type', 'application/json; charset=utf-8')
+        profile_request.add_header('Authorization', f'Bearer {access_token}')
+        profile_request.add_header('Content-Length', len(profile_data))
+
+        urllib.request.urlopen(profile_request, profile_data)
+
+        print_success(f"Submitted device profile to prospector service at {PROFILE_API_URL}")
+    except urllib.error.HTTPError as e:
+        print_error(f"Failed to send device profile to profile service: {e}")
     except Exception as e:
-        print_error(f"Failed to send device profile to prospect service: {e}")
+        print_error(f"Unexpected error during profile submission: {e}")
 
 
-def new_profile() -> dict:
+def new_profile(username: str, password: str) -> dict:
     """
     Main function to generate and write the device profile.
     """
 
     print_info("Collecting device profile...")
-    print(" ")
 
     try:
         profile = get_profile()
+
         write_profile(profile)
-        send_profile(profile)
-        print(" ")
+        send_profile(username, password, profile)
 
         return profile
     except Exception as e:
@@ -584,11 +621,13 @@ def new_profile() -> dict:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Collect and send device profile.")
-    parser.add_argument('--no-interactive', action='store_true', help="Run without asking for user input.")
+    parser.add_argument('--no-interactive', action="store_true", help="Run without asking for user input.")
+    parser.add_argument('--user', type=str, help="Specify your prospector username.")
+    parser.add_argument('--password', type=str, help="Specify your prospector password.")
 
     args = parser.parse_args()
 
-    profile = new_profile()
+    profile = new_profile(args.user, args.password)
     if profile and not args.no_interactive:
         print_info("Press 'p' to print device profile or any other key to exit...")
         key = msvcrt.getch()
