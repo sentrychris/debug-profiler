@@ -20,7 +20,7 @@ def check_file_exists(filepath):
         sys.exit(1)
 
 
-def download_and_extract_upx():
+def prepare_upx():
     print("Downloading UPX...")
     url = f"https://github.com/upx/upx/releases/download/v{UPX_VERSION}/{UPX_RELEASE}.zip"
     zip_path = os.path.join(CWD, f"{UPX_RELEASE}.zip")
@@ -47,7 +47,7 @@ def main():
 
     print("Checking for UPX...")
     if not os.path.exists(os.path.join(CWD, UPX_RELEASE)):
-        download_and_extract_upx()
+        prepare_upx()
     else:
         print("UPX is available")
 
