@@ -554,6 +554,19 @@ def write_profile(profile: dict) -> None:
 
 
 def get_token_from_registry(token_type: str) -> str:
+    """
+    Retrieves a token from the Windows registry.
+
+    Args:
+        token_type (str): The type of token to retrieve (e.g., "AccessToken" or "RefreshToken").
+
+    Returns:
+        str: The token retrieved from the registry, or None if an error occurs or the token is not found.
+
+    Raises:
+        Exception: If an error occurs while accessing the registry.
+    """
+
     try:
         reg_key = open_reg_key(winreg.HKEY_CURRENT_USER, REGISTRY_PATH)
         if reg_key:
@@ -566,6 +579,20 @@ def get_token_from_registry(token_type: str) -> str:
 
 
 def set_token_in_registry(token_type: str, token: str) -> None:
+    """
+    Stores a token in the Windows registry.
+
+    Args:
+        token_type (str): The type of token to store (e.g., "AccessToken" or "RefreshToken").
+        token (str): The token value to store.
+
+    Returns:
+        None
+
+    Raises:
+        Exception: If an error occurs while accessing the registry.
+    """
+
     try:
         reg_key = open_reg_key(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, create=True)
         winreg.SetValueEx(reg_key, token_type, 0, winreg.REG_SZ, token)
@@ -577,10 +604,18 @@ def set_token_in_registry(token_type: str, token: str) -> None:
 
 def authenticate_user(username: str, password: str) -> str:
     """
-    Authenticate and obtain an access token.
+    Authenticates the user and obtains an access token and a refresh token.
+
+    Args:
+        username (str): The username for authentication.
+        password (str): The password for authentication.
 
     Returns:
-        str: The access token.
+        dict: The authentication response containing tokens.
+
+    Raises:
+        urllib.error.HTTPError: If an HTTP error occurs during authentication.
+        Exception: If an unexpected error occurs during authentication.
     """
 
     try:
@@ -607,6 +642,16 @@ def authenticate_user(username: str, password: str) -> str:
 
 
 def get_access_token():
+    """
+    Retrieves the access token from the registry or prompts for user credentials to obtain a new token.
+
+    Returns:
+        str: The access token.
+
+    Raises:
+        Exception: If an unexpected error occurs during token retrieval or authentication.
+    """
+
     access_token = get_token_from_registry("AccessToken")
     if not access_token:
         if not args.user:
@@ -623,7 +668,7 @@ def get_access_token():
 
 def send_profile(access_token: str, profile: dict) -> None:
     """
-    Sends the device profile to the prosect profiling service API.
+    Sends the device profile to the prosector service.
 
     Args:
         profile (dict): The device profile to send.
