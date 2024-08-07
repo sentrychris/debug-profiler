@@ -5,11 +5,8 @@ import os
 
 project_root = os.getcwd()
 main_script = os.path.join(project_root, 'main.py')
-
-public_folder = os.path.join(project_root, 'public')
-icon_file = os.path.join(project_root, 'prospector.ico')
-version_file = os.path.join(project_root, 'version.rc')
-
+icon_file = os.path.join(project_root, 'package', 'prospector.ico')
+version_file = os.path.join(project_root, 'package', 'version.rc')
 block_cipher = None
 
 
@@ -31,7 +28,9 @@ a = Analysis(
     noarchive=False
 )
 
+
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+
 
 exe = EXE(pyz,
     a.scripts,
