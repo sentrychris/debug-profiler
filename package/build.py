@@ -6,6 +6,10 @@ import zipfile
 import urllib.request
 
 
+BUILD_SPEC = "prospector.spec"
+UPX_VERSION = "4.2.4"
+
+
 def print_usage():
     """
     Prints the usage information for the script and exits.
@@ -33,12 +37,12 @@ def prepare_upx(pkg_dir: str, upx_ver: str) -> str:
         upx_dir (str): The directory where the UPX package is located.
     """
 
-    upx_dir = os.path.join(pkg_dir, upx_ver)
-    upx_url = f"https://github.com/upx/upx/releases/download/v{upx_ver}/upx-{upx_ver}-win64.zip"
+    upx_file = f"upx-{upx_ver}-win64.zip"
+    upx_path = os.path.join(pkg_dir, upx_file)
+    upx_url = f"https://github.com/upx/upx/releases/download/v{upx_ver}/{upx_file}"
     
-    if not os.path.exists(upx_dir):
+    if not os.path.exists(upx_path):
         print("Downloading UPX...")
-        upx_path = os.path.join(pkg_dir, f"{upx_ver}.zip")
         urllib.request.urlretrieve(upx_url, upx_path)
 
         with zipfile.ZipFile(upx_path, 'r') as zip_ref:
@@ -48,7 +52,7 @@ def prepare_upx(pkg_dir: str, upx_ver: str) -> str:
     else:
         print("UPX is available")
 
-    return upx_dir
+    return upx_path[:-4]
 
 
 def clean_directory(directory: str):
@@ -69,14 +73,14 @@ def main():
     build_dir = os.path.join(pwd, "build")
     dist_dir = os.path.join(pwd, "dist")
     pkg_dir = os.path.join(pwd, "package")
-    spec_file = os.path.join(pkg_dir, "prospector.spec")
+    spec_file = os.path.join(pkg_dir, BUILD_SPEC)
 
     print("Performing prebuild cleanup...")
     clean_directory(build_dir)
     clean_directory(dist_dir)
 
     print("Preparing UPX...")
-    upx_dir = prepare_upx(pkg_dir, "4.2.4")
+    upx_dir = prepare_upx(pkg_dir, UPX_VERSION)
 
     print("Building prospector binary executable...")
     subprocess.run(["pyinstaller", spec_file, "--upx-dir", upx_dir], check=True)
