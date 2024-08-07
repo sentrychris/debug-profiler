@@ -2,6 +2,7 @@ import argparse
 import ctypes
 import getpass
 import hashlib
+import keyring
 import logging
 import json
 import msvcrt
@@ -14,10 +15,10 @@ import urllib.request
 import winreg
 
 
-AUTH_LOGIN_API_URL="http://localhost:8080/api/auth/login"
-AUTH_REFRESH_API_URL="http://localhost:8080/api/auth/refresh"
-PROFILE_API_URL="http://localhost:8080/api/devices/profiles"
-REGISTRY_PATH=r"Software\Prospector"
+AUTH_LOGIN_API_URL="https://prospect-api.versyx.net/api/auth/login"
+AUTH_REFRESH_API_URL="https://prospect-api.versyx.net/api/auth/refresh"
+PROFILE_API_URL="https://prospect-api.versyx.net/api/devices/profiles"
+SERVICE_NAME = "ProspectorService"
 
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
@@ -554,34 +555,30 @@ def write_profile(profile: dict) -> None:
         print_error(f"Failed to write new device profile: {e}")
 
 
-def get_token_from_registry(token_type: str) -> str:
+def get_token_from_credential_manager(token_type: str) -> str:
     """
-    Retrieves a token from the Windows registry.
+    Retrieves a token from the system's credential manager.
 
     Args:
         token_type (str): The type of token to retrieve (e.g., "AccessToken" or "RefreshToken").
 
     Returns:
-        str: The token retrieved from the registry, or None if an error occurs or the token is not found.
+        str: The token retrieved from the credential manager, or None if an error occurs or the token is not found.
 
     Raises:
-        Exception: If an error occurs while accessing the registry.
+        Exception: If an error occurs while accessing the credential manager.
     """
 
     try:
-        reg_key = open_reg_key(winreg.HKEY_CURRENT_USER, REGISTRY_PATH)
-        if reg_key:
-            token, _ = winreg.QueryValueEx(reg_key, token_type)
-            winreg.CloseKey(reg_key)
-            return token
+        return keyring.get_password(SERVICE_NAME, token_type)
     except Exception as e:
-        print_error(f"Failed to get {token_type} from registry: {e}")
+        print_error(f"Failed to get {token_type} from credential manager: {e}")
     return None
 
 
-def set_token_in_registry(token_type: str, token: str) -> None:
+def set_token_in_credential_manager(token_type: str, token: str) -> None:
     """
-    Stores a token in the Windows registry.
+    Stores a token in the system's credential manager.
 
     Args:
         token_type (str): The type of token to store (e.g., "AccessToken" or "RefreshToken").
@@ -591,16 +588,14 @@ def set_token_in_registry(token_type: str, token: str) -> None:
         None
 
     Raises:
-        Exception: If an error occurs while accessing the registry.
+        Exception: If an error occurs while accessing the credential manager.
     """
 
     try:
-        reg_key = open_reg_key(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, create=True)
-        winreg.SetValueEx(reg_key, token_type, 0, winreg.REG_SZ, token)
-        winreg.CloseKey(reg_key)
-        print_success(f"{token_type} saved to registry.")
+        keyring.set_password(SERVICE_NAME, token_type, token)
+        print_success(f"{token_type} saved to credential manager.")
     except Exception as e:
-        print_error(f"Failed to save {token_type} to registry: {e}")
+        print_error(f"Failed to save {token_type} to credential manager: {e}")
 
 
 def authenticate_user(username: str, password: str) -> str:
@@ -680,7 +675,8 @@ def refresh_access_token(refresh_token: str) -> dict:
 
 def get_access_token():
     """
-    Retrieves the access token from the registry or prompts for user credentials to obtain a new token.
+    Retrieves the access token from the credential manager or prompts for user credentials to obtain a
+    new token.
 
     Returns:
         str: The access token.
@@ -689,15 +685,14 @@ def get_access_token():
         Exception: If an unexpected error occurs during token retrieval or authentication.
     """
 
-    access_token = get_token_from_registry("AccessToken")
+    access_token = get_token_from_credential_manager("AccessToken")
     if not access_token:
-        if not args.user:
-            args.user = input("Enter your username: ")
+        username = input("Enter your username: ")
         password = getpass.getpass(prompt="Enter your password: ")
 
-        auth_response = authenticate_user(args.user, password)
-        set_token_in_registry("AccessToken", auth_response['access_token'])
-        set_token_in_registry("RefreshToken", auth_response['refresh_token'])
+        auth_response = authenticate_user(username, password)
+        set_token_in_credential_manager("AccessToken", auth_response['access_token'])
+        set_token_in_credential_manager("RefreshToken", auth_response['refresh_token'])
         access_token = auth_response['access_token']
     
     return access_token
@@ -726,14 +721,14 @@ def send_profile(access_token: str, profile: dict) -> None:
         if e.code == 401:
             print_info(f"Access token expired. Refreshing token...")
 
-            refresh_token = get_token_from_registry("RefreshToken")
+            refresh_token = get_token_from_credential_manager("RefreshToken")
             if not refresh_token:
                 print_error("Refresh token not found. Please authenticate again.")
                 raise
 
             auth_response = refresh_access_token(refresh_token)
-            set_token_in_registry("AccessToken", auth_response['access_token'])
-            set_token_in_registry("RefreshToken", auth_response['refresh_token'])
+            set_token_in_credential_manager("AccessToken", auth_response['access_token'])
+            set_token_in_credential_manager("RefreshToken", auth_response['refresh_token'])
 
             # Retry sending the profile with the new access token
             send_profile(auth_response['access_token'], profile)
@@ -745,7 +740,7 @@ def send_profile(access_token: str, profile: dict) -> None:
         raise
 
 
-def new_profile(access_token: str) -> dict:
+def new_profile(send_to_service: bool) -> dict:
     """
     Main function to generate and write the device profile.
     """
@@ -755,8 +750,11 @@ def new_profile(access_token: str) -> dict:
     try:
         profile = get_profile()
 
-        write_profile(profile)        
-        send_profile(access_token, profile)
+        write_profile(profile)
+
+        if send_to_service:
+            access_token = get_access_token()
+            send_profile(access_token, profile)
 
         return profile
     except Exception as e:
@@ -765,15 +763,13 @@ def new_profile(access_token: str) -> dict:
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Collect and send device profile.")
-    parser.add_argument('--no-interactive', action="store_true", help="Run without asking for user input.")
-    parser.add_argument('--user', type=str, help="Specify your prospector username.")
+    parser = argparse.ArgumentParser(description="Collect and send prospector device profiles for Windows.")
+    parser.add_argument('--silent', action="store_true", help="Run without user input (note: user must authenticate first).")
+    parser.add_argument('--send', action="store_true", help="Send device profile to the prospector service.")
     args = parser.parse_args()
 
-    access_token = get_access_token()
-
-    profile = new_profile(access_token)
-    if profile and not args.no_interactive:
+    profile = new_profile(args.send)
+    if profile and not args.silent:
         print_info("Press 'p' to print device profile or any other key to exit...")
         key = msvcrt.getch()
         if key.lower() == b'p':
