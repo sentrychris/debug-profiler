@@ -11,7 +11,7 @@ from .auth_handler import get_token_from_credential_manager, set_token_in_creden
 from .output_handler import print_error, print_info, print_success
 
 
-PROFILE_API_URL="https://prospect-api.versyx.net/api/devices/profiles"
+PROFILE_API_URL="https://prospect-api.versyx.net/api/device"
 
 
 def get_profile() -> dict:
